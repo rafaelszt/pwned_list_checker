@@ -79,35 +79,45 @@ def check_paste(email):
 
 
 def mail_list(list, long_version):
-    pwned_list = []
+    breach_list = []
+    paste_list = []
 
     for mail in list:
-        pwned = check_breach(mail, long_version)
-
         # Did the email have any leaks?
+        pwned = check_breach(mail, long_version)
         if (len(pwned) > 0):
-            pwned_list.append(pwned)
+            breach_list.append(pwned)
+
+        # What about in the pastes?
+        pwned = check_paste(mail)
+        if (len(pwned) > 0):
+            paste_list.append(pwned)
 
         # Let's not abuse the API
         time.sleep(1.5)
 
-    return pwned_list
+    return breach_list, paste_list
 
 
 def single_mail(mail):
+    breach = []
+    paste = []
+
     pwned = check_breach(mail, False)
-
     if len(pwned) > 0:
-        return pwned
+        breach = pwned
 
-    return []
+    pwned = check_paste(mail)
+    if len(pwned) > 0:
+        paste = pwned
+
+    return breach, paste
 
 
 def print_json(list):
     for l in list:
         print (json.dumps(list, sort_keys=False,
                           indent=4, separators=None))
-        print()
 
 
 def show_options():
@@ -119,9 +129,11 @@ def show_options():
 
 def main(argv):
     pwned_mails = []
+    breach_list = []
+    paste_list = []
 
     try:
-        opts, args = getopt.getopt(argv,"hl:s:",["list=","single="])
+        opts, args = getopt.getopt(argv,"hl:s:c",["list=","single="])
 
     except getopt.GetoptError:
         show_options()
@@ -137,18 +149,24 @@ def main(argv):
             sys.exit()
 
         elif opt in ('-l', '--list'):
-            if len(mail_list(load_file(arg), False)) > 0:
+            mails = load_file(arg)
+            breach_list, paste_list = mail_list(mails, False)
+            if len(breach_list) > 0 or len(paste_list) > 0:
+                print(arg)
                 pwned_mails.append(arg)
 
         elif opt in ('-s', '--single'):
-            if len(single_mail(arg)) > 0:
+            breach_list, paste_list = single_mail(arg)
+            if len(breach_list) > 0 or len(paste_list) > 0:
                 pwned_mails.append(arg)
 
-    # if we got some pwned users, get more info on then
-    if pwned_mails is not []:
-        print(pwned_mails)
-        pwned_mails = mail_list(pwned_mails, True)
-        print_json(pwned_mails)
+        if opt in ('-c'):
+            # if we got some pwned users, get more info on then
+            if pwned_mails is not []:
+                pwned_mails = mail_list(pwned_mails, True)
+                print_json(pwned_mails)
+        else:
+            print (pwned_mails)
 
 
 if __name__ == "__main__":
