@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import requests
 import sys
 import time
@@ -10,19 +11,22 @@ PWNED_PASTE_API_URL = "https://haveibeenpwned.com/api/v2/pasteaccount/%s"
 
 
 class ProgressBar():
-    previous_value = -1
+    previous_value = 0.0
 
     def __init__(self):
-        self.toolbar_width = 100
+        self.toolbar_width = 20
 
-        sys.stdout.write("[%s]" % (" " * self.toolbar_width))
+        sys.stdout.write("[%s]" % (" " * ( self.toolbar_width)))
         sys.stdout.flush()
-        sys.stdout.write("\b" * (self.toolbar_width+1)) # return to start of line, after '['
+        sys.stdout.write("\b" * (self.toolbar_width + 1)) # return to start of line, after '['
 
 
     def update(self, value):
-        if (value != self.previous_value):
-            self.previous_value = value
+        value = value * self.toolbar_width;
+        #print ("Value: %.1f Previous: %.1f" %(value, self.previous_value))
+
+        while (value > self.previous_value):
+            self.previous_value += 1
             sys.stdout.write("-")
             sys.stdout.flush()
 
@@ -80,34 +84,38 @@ def response(req):
 def check_breach(email, long_version=False):
     req = ''
 
-    if long_version:
-        req = requests.get(PWNED_BREACH_API_URL % email)
-
-    else:
-        req = requests.get(PWNED_BREACH_SHORT_API_URL % email)
-
     try:
+        if long_version:
+            req = requests.get(PWNED_BREACH_API_URL % email)
+
+        else:
+            req = requests.get(PWNED_BREACH_SHORT_API_URL % email)
+
         r = response(req)
+
     except ToManyRequests:
         print ("Too many requests, waiting a few seconds before trying again.")
         time.sleep (int(req.headers['Retry-After']) + 0.1)
         r = check_breach(email, long_version)
+
     except:
+        print ("Something whent wrong, code: ", sys.exc_info()[0])
         sys.exit(2)
 
     return r
 
 
 def check_paste(email):
-    req = requests.get(PWNED_PASTE_API_URL % email)
-
     try:
+        req = requests.get(PWNED_PASTE_API_URL % email)
         r = response(req)
 
     except ToManyRequests:
         time.sleep (int(req.headers['Retry-After']) + 0.1)
         r = check_paste(email)
+
     except:
+        print ("Something whent wrong, code: ", sys.exc_info()[0])
         sys.exit(2)
 
     return r
@@ -147,7 +155,7 @@ def mail_list(list, long_version):
 
         # We can't forget about our progress bar
         total_processed += 1
-        progress_bar.update(int(total_processed / len(list)*100))
+        progress_bar.update(float(total_processed / len(list)))
 
         # Let's not abuse the API
         time.sleep(1.5)
@@ -187,27 +195,31 @@ def main(argv):
             mails = load_file(arg)
             breach_list, paste_list = mail_list(mails, False)
 
+            if len(breach_list) > 0:
+                print ("\n\nEmails with a breach:")
+                for m in breach_list: print (m)
+
+            if len(paste_list) > 0:
+                print ("\n\nEmails in a paste:")
+                for m in paste_list: print (m)
+
             break
 
         elif opt in ('-s', '--single'):
             breach_list, paste_list = single_mail(arg, False)
+
             if breach_list:
-                breach_list = arg
+                print ("Email in a breach")
+
             if paste_list:
-                paste_list = arg
+                print ("\nEmail in a paste")
 
             break
-
-    if len(breach_list) > 0:
-        print ("Emails with a breach:")
-        print (breach_list)
-    if len(paste_list) > 0:
-        print ("Emails in a paste:")
-        print (paste_list)
 
 
 if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except KeyboardInterrupt:
+        print ("\nBye")
         sys.exit(1)
